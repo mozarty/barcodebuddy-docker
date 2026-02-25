@@ -21,6 +21,7 @@ func Parse() {
 	parseMain()
 	parseTimezone()
 	parseNginxEnv()
+	fixRailwayDNS()
 }
 
 func parseMain() {
@@ -119,4 +120,48 @@ func sliceContains(slice []string, element string) bool {
 		}
 	}
 	return false
+}
+
+func fixRailwayDNS() {
+	// Railway uses IPv6 DNS resolver fd12::10 which needs brackets in nginx config
+	resolverFile := "/etc/resolv.conf"
+	nginxConfFile := "/etc/nginx/nginx.conf"
+	
+	resolverContent, err := os.ReadFile(resolverFile)
+	if err != nil {
+		// If resolv.conf doesn't exist, skip this fix
+		return
+	}
+	
+	// Check if Railway DNS is present
+	if !strings.Contains(string(resolverContent), "fd12::10") {
+		return
+	}
+	
+	fmt.Println("Detected Railway IPv6 DNS, configuring nginx resolver")
+	
+	// Read nginx config
+	nginxContent, err := os.ReadFile(nginxConfFile)
+	check(err)
+	
+	var updatedConfig []string
+	scanner := bufio.NewScanner(bytes.NewReader(nginxContent))
+	resolverAdded := false
+	
+	for scanner.Scan() {
+		line := scanner.Text()
+		updatedConfig = append(updatedConfig, line)
+		
+		// Add resolver directive after the http block opens
+		if strings.Contains(line, "http {") && !resolverAdded {
+			updatedConfig = append(updatedConfig, "  resolver [fd12::10] valid=10s;")
+			resolverAdded = true
+		}
+	}
+	
+	if resolverAdded {
+		err = os.WriteFile(nginxConfFile, []byte(strings.Join(updatedConfig, "\n")), 0644)
+		check(err)
+		fmt.Println("Railway DNS resolver configured successfully")
+	}
 }

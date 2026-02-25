@@ -103,7 +103,6 @@ sed -i 's/const DEFAULT_USE_REDIS =.*/const DEFAULT_USE_REDIS = "1";/g' /app/bbu
 COPY --from=build_base /compile/supervisor /app/supervisor
 
 EXPOSE 80 443
-VOLUME /config
 
 CMD ["/app/supervisor"]
 
